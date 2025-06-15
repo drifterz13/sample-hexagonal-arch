@@ -37,8 +37,8 @@ src/
 ├── shared/              # Shared domain utilities and base classes
 ├── [module]/
 │   ├── domain/          # Domain layer (business logic)
-│   │   ├── model/       # Entities and aggregates
-│   │   ├── value-object/ # Value objects
+│   │   ├── entities/       # Entities and aggregates
+│   │   ├── value-objects/ # Value objects
 │   │   ├── ports/       # Domain ports (interfaces)
 │   │   └── errors.ts    # Domain-specific errors
 │   ├── application/     # Application layer (use cases)

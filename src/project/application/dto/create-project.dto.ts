@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, MaxLength, IsIn } from 'class-validator';
+import { IsString, IsNotEmpty, MaxLength } from 'class-validator';
 
 export class CreateProjectDto {
   @ApiProperty({
@@ -20,15 +20,4 @@ export class CreateProjectDto {
   @IsString({ message: 'Description must be a string' })
   @MaxLength(250, { message: 'Description must be 250 characters or less' })
   readonly description: string;
-
-  @ApiProperty({
-    description: 'Project status',
-    enum: ['draft', 'active', 'completed', 'archived'],
-    example: 'active',
-  })
-  @IsString({ message: 'Status must be a string' })
-  @IsIn(['draft', 'active', 'completed', 'archived'], {
-    message: 'Status must be one of: draft, active, completed, archived',
-  })
-  readonly status: string;
 }

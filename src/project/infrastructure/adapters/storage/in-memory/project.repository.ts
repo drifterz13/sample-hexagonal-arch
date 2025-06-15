@@ -1,4 +1,4 @@
-import { Project } from 'src/project/domain/model/Project';
+import { Project } from 'src/project/domain/entities/Project';
 import { IProjectRepository } from 'src/project/domain/ports/repository';
 
 type ProjectSchema = {

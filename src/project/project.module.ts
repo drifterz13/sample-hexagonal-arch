@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { ProjectUseCases } from './application/adapters/project-usecases';
+import { ProjectService } from './application/adapters/project.service';
 import { IProjectRepository } from './domain/ports/repository';
 import { INJECTION_TOKENS } from './injection-tokens';
 import { ProjectController } from './infrastructure/adapters/http/project.controller';
@@ -15,7 +15,7 @@ import { InMemoryProjectRepository } from './infrastructure/adapters/storage/in-
     {
       provide: INJECTION_TOKENS.PROJECT_USE_CASES,
       useFactory: (repository: IProjectRepository) => {
-        return new ProjectUseCases(repository);
+        return new ProjectService(repository);
       },
       inject: [INJECTION_TOKENS.PROJECT_REPOSITORY],
     },

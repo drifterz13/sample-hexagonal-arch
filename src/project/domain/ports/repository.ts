@@ -1,4 +1,4 @@
-import { Project } from '../model/Project';
+import { Project } from '../entities/Project';
 
 export interface IProjectRepository {
   findAll(): Promise<Project[]>;

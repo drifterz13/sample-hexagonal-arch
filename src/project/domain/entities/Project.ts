@@ -1,7 +1,7 @@
-import { ProjectDescription } from '../value-object/project-description';
-import { ProjectId } from '../value-object/project-id';
-import { ProjectStatus } from '../value-object/project-status';
-import { ProjectTitle } from '../value-object/project-title';
+import { ProjectDescription } from '../value-objects/project-description';
+import { ProjectId } from '../value-objects/project-id';
+import { ProjectStatus } from '../value-objects/project-status';
+import { ProjectTitle } from '../value-objects/project-title';
 
 export class Project {
   readonly #id: ProjectId;

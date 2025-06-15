@@ -1,4 +1,4 @@
-import { GenId } from 'src/shared/domain/gen-id';
+import { GenId } from '../../../shared/domain/gen-id';
 
 export class ProjectId extends GenId {
   private constructor(id?: string) {

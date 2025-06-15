@@ -24,12 +24,20 @@ export class ProjectStatus {
     return this.value === other;
   }
 
-  set value(value: string) {
-    if (!this.isValidStatus(value)) {
-      throw new ProjectValidationError('Invalid project status');
-    }
+  static draft(): ProjectStatus {
+    return new ProjectStatus('draft');
+  }
 
-    this.#value = value;
+  static active(): ProjectStatus {
+    return new ProjectStatus('active');
+  }
+
+  static completed(): ProjectStatus {
+    return new ProjectStatus('completed');
+  }
+
+  static archived(): ProjectStatus {
+    return new ProjectStatus('archived');
   }
 
   get value(): string {

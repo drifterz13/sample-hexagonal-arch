@@ -2,16 +2,23 @@ import {
   ProjectNotFoundError,
   ProjectValidationError,
 } from 'src/project/domain/errors';
-import { Project } from 'src/project/domain/model/Project';
+import { Project } from 'src/project/domain/entities/Project';
 import { IProjectRepository } from 'src/project/domain/ports/repository';
-import { ProjectId } from 'src/project/domain/value-object/project-id';
+import { ProjectId } from 'src/project/domain/value-objects/project-id';
 import { CreateProjectDto } from '../dto/create-project.dto';
 import { ProjectResponseDto } from '../dto/project-response.dto';
 import { UpdateProjectDto } from '../dto/update-project.dto';
 import { IProjectUseCases } from '../ports/project-usecases.interface';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { ProjectDtoMapper } from '../mappers/project-dto.mapper';
+import { ProjectStatus } from 'src/project/domain/value-objects/project-status';
 
-export class ProjectUseCases implements IProjectUseCases {
-  constructor(private readonly repo: IProjectRepository) {}
+export class ProjectService implements IProjectUseCases {
+  private readonly repo: IProjectRepository;
+
+  constructor(repo: IProjectRepository) {
+    this.repo = repo;
+  }
 
   async createProject(dto: CreateProjectDto): Promise<void> {
     try {
@@ -19,7 +26,7 @@ export class ProjectUseCases implements IProjectUseCases {
         ProjectId.generate().value,
         dto.title,
         dto.description,
-        dto.status,
+        ProjectStatus.draft().value,
       );
       return this.repo.save(project);
     } catch (error) {
@@ -50,8 +57,9 @@ export class ProjectUseCases implements IProjectUseCases {
       return this.repo.save(project);
     } catch (error) {
       if (error instanceof ProjectValidationError) {
-        throw error;
+        throw new BadRequestException(error);
       }
+
       throw new Error(`Failed to update project: ${error.message}`);
     }
   }
@@ -59,33 +67,20 @@ export class ProjectUseCases implements IProjectUseCases {
   async getProject(projectId: string): Promise<ProjectResponseDto> {
     const project = await this.repo.findById(projectId);
     if (!project) {
-      throw new ProjectNotFoundError(`Project with ID ${projectId} not found`);
+      throw new NotFoundException(`Project with ID ${projectId} not found`);
     }
-    return new ProjectResponseDto(
-      project.id,
-      project.title,
-      project.description,
-      project.status,
-    );
+    return ProjectDtoMapper.toResponseDto(project);
   }
 
   async getAllProjects(): Promise<ProjectResponseDto[]> {
     const projects = await this.repo.findAll();
-    return projects.map(
-      (project) =>
-        new ProjectResponseDto(
-          project.id,
-          project.title,
-          project.description,
-          project.status,
-        ),
-    );
+    return projects.map(ProjectDtoMapper.toResponseDto);
   }
 
   async deleteProject(projectId: string): Promise<void> {
     const project = await this.repo.findById(projectId);
     if (!project) {
-      throw new ProjectNotFoundError(`Project with ID ${projectId} not found`);
+      throw new NotFoundException(`Project with ID ${projectId} not found`);
     }
     await this.repo.delete(projectId);
   }
