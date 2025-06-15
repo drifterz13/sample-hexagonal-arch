@@ -5,26 +5,21 @@ import {
 import { Project } from 'src/project/domain/model/Project';
 import { IProjectRepository } from 'src/project/domain/ports/repository';
 import { ProjectId } from 'src/project/domain/value-object/project-id';
+import { CreateProjectDto } from '../dto/create-project.dto';
+import { ProjectResponseDto } from '../dto/project-response.dto';
+import { UpdateProjectDto } from '../dto/update-project.dto';
 import { IProjectUseCases } from '../ports/project-usecases.interface';
 
 export class ProjectUseCases implements IProjectUseCases {
-  private readonly repo: IProjectRepository;
+  constructor(private readonly repo: IProjectRepository) {}
 
-  constructor(repo: IProjectRepository) {
-    this.repo = repo;
-  }
-
-  async createProject(
-    title: string,
-    description: string,
-    status: string,
-  ): Promise<void> {
+  async createProject(dto: CreateProjectDto): Promise<void> {
     try {
       const project = Project.create(
         ProjectId.generate().value,
-        title,
-        description,
-        status,
+        dto.title,
+        dto.description,
+        dto.status,
       );
       return this.repo.save(project);
     } catch (error) {
@@ -35,28 +30,21 @@ export class ProjectUseCases implements IProjectUseCases {
     }
   }
 
-  async updateProject(
-    projectId: string,
-    updates: {
-      title?: string;
-      description?: string;
-      status?: string;
-    },
-  ): Promise<void> {
+  async updateProject(projectId: string, dto: UpdateProjectDto): Promise<void> {
     const project = await this.repo.findById(projectId);
     if (!project) {
       throw new ProjectNotFoundError(`Project with ID ${projectId} not found`);
     }
 
     try {
-      if (updates.title !== undefined) {
-        project.updateTitle(updates.title);
+      if (dto.title !== undefined) {
+        project.updateTitle(dto.title);
       }
-      if (updates.description !== undefined) {
-        project.updateDescription(updates.description);
+      if (dto.description !== undefined) {
+        project.updateDescription(dto.description);
       }
-      if (updates.status !== undefined) {
-        project.updateStatus(updates.status);
+      if (dto.status !== undefined) {
+        project.updateStatus(dto.status);
       }
 
       return this.repo.save(project);
@@ -68,12 +56,30 @@ export class ProjectUseCases implements IProjectUseCases {
     }
   }
 
-  async getProject(projectId: string): Promise<Project> {
+  async getProject(projectId: string): Promise<ProjectResponseDto> {
     const project = await this.repo.findById(projectId);
     if (!project) {
       throw new ProjectNotFoundError(`Project with ID ${projectId} not found`);
     }
-    return project;
+    return new ProjectResponseDto(
+      project.id,
+      project.title,
+      project.description,
+      project.status,
+    );
+  }
+
+  async getAllProjects(): Promise<ProjectResponseDto[]> {
+    const projects = await this.repo.findAll();
+    return projects.map(
+      (project) =>
+        new ProjectResponseDto(
+          project.id,
+          project.title,
+          project.description,
+          project.status,
+        ),
+    );
   }
 
   async deleteProject(projectId: string): Promise<void> {

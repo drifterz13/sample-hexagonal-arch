@@ -1,10 +1,9 @@
-import { AggregateRoot } from '@nestjs/cqrs';
 import { ProjectDescription } from '../value-object/project-description';
 import { ProjectId } from '../value-object/project-id';
 import { ProjectStatus } from '../value-object/project-status';
 import { ProjectTitle } from '../value-object/project-title';
 
-export class Project extends AggregateRoot {
+export class Project {
   readonly #id: ProjectId;
   #title: ProjectTitle;
   #description: ProjectDescription;
@@ -16,8 +15,6 @@ export class Project extends AggregateRoot {
     description: string,
     status: string,
   ) {
-    super();
-
     this.#id = ProjectId.generate(id);
     this.#title = ProjectTitle.create(title);
     this.#description = ProjectDescription.create(description);

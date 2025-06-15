@@ -40,19 +40,6 @@ export class InMemoryProjectRepository implements IProjectRepository {
     }
   }
 
-  async update(project: Project): Promise<void> {
-    const existingIndex = this.projects.findIndex((p) => p.id === project.id);
-    if (existingIndex >= 0) {
-      this.projects[existingIndex] = {
-        ...this.projects[existingIndex],
-        title: project.title,
-        description: project.description,
-        status: project.status,
-        updatedAt: new Date(),
-      };
-    }
-  }
-
   async delete(id: string): Promise<void> {
     this.projects = this.projects.filter((p) => p.id !== id);
   }
