@@ -1,0 +1,847 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>DDD & Hexagonal Architecture Migration</title>
+    <meta charset="utf-8">
+    <style>
+        @import url(https://fonts.googleapis.com/css?family=Yanone+Kaffeesatz);
+        @import url(https://fonts.googleapis.com/css?family=Droid+Serif:400,700,400italic);
+        @import url(https://fonts.googleapis.com/css?family=Ubuntu+Mono:400,700,400italic);
+
+        body { font-family: 'Droid Serif'; }
+        h1, h2, h3 {
+            font-family: 'Yanone Kaffeesatz';
+            font-weight: normal;
+        }
+        .remark-code, .remark-inline-code { 
+            font-family: 'Ubuntu Mono';
+            font-size: 14px;
+        }
+        .red { color: #fa0000; }
+        .green { color: #00a000; }
+        .blue { color: #0066cc; }
+        .orange { color: #ff6600; }
+        
+        .problem-box {
+            background: #ffe6e6;
+            border-left: 5px solid #ff4444;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        
+        .solution-box {
+            background: #e6ffe6;
+            border-left: 5px solid #44ff44;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        
+        .architecture-diagram {
+            text-align: center;
+            font-family: monospace;
+            background: #f0f0f0;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        
+        .small-code .remark-code {
+            font-size: 11px;
+        }
+        
+        .tiny-code .remark-code {
+            font-size: 9px;
+        }
+    </style>
+</head>
+<body>
+    <textarea id="source">
+
+class: center, middle
+
+# Migration to DDD & Hexagonal Architecture
+
+## Solving Legacy Code Problems with Domain-Driven Design
+
+### NestJS + TypeORM Codebase Evolution
+
+---
+
+## Current Problems 
+
+.problem-box[
+**🔥 Scattered Business Logic**
+- Rules spread across controllers, services, utils, validators
+- No single source of truth for domain concepts
+]
+
+.problem-box[
+**🔥 Testing Nightmare**
+- Tightly coupled components
+- Can't test business logic in isolation
+- Integration tests are brittle
+]
+
+.problem-box[
+**🔥 Maintenance Issues**
+- Adding features causes bugs
+- Unclear boundaries and responsibilities
+- No domain modeling
+]
+
+---
+
+## Our Current Architecture
+
+```typescript
+// ❌ Business logic scattered everywhere
+@Controller('users')
+export class UserController {
+  async updateProfile(@Body() dto: UpdateProfileDto) {
+    // Validation logic here
+    if (!dto.email.includes('@')) throw new Error('Invalid email');
+    
+    return this.userService.updateProfile(dto);
+  }
+}
+
+@Injectable()
+export class UserService {
+  async updateProfile(dto: UpdateProfileDto) {
+    // More business logic here
+    if (dto.age < 18) {
+      dto.permissions = 'limited';
+    }
+    
+    const entity = this.mapper.dtoToEntity(dto);
+    return this.userRepository.save(entity);
+  }
+}
+
+// Utils with business logic
+export function canAccessClassroom(user: any, classroom: any) {
+  return user.role === 'teacher' || user.classrooms.includes(classroom.id);
+}
+```
+
+---
+
+## Proposed Solution: DDD + Hexagonal Architecture
+
+.solution-box[
+**✅ Centralized Business Logic** - Domain entities hold all business rules
+
+**✅ Testable in Isolation** - Pure domain logic without dependencies
+
+**✅ Legacy Integration** - ACL pattern connects old and new code
+
+**✅ Clear Boundaries** - Ports & Adapters separate concerns
+]
+
+---
+
+## New Architecture Overview
+
+<div class="mermaid">
+graph TB
+    subgraph "Application Layer"
+        AS[Application Services]
+        ACL[Anti-Corruption Layer]
+        M[Mappers]
+        DTO[DTOs]
+    end
+    
+    subgraph "Domain Layer"
+        DE[Domain Entities]
+        VO[Value Objects]
+        DS[Domain Services]
+        DI[Domain Interfaces]
+    end
+    
+    subgraph "Infrastructure Layer"
+        E[TypeORM Entities]
+        R[Repositories]
+        P[External Providers]
+        L[Legacy Services]
+    end
+    
+    AS --> ACL
+    AS --> DS
+    DTO -.-> M
+    M --> DE
+    M --> E
+    ACL --> L
+    R --> E
+    P --> DI
+    
+    style DE fill:#e1f5fe
+    style VO fill:#e8f5e8
+    style DS fill:#fff3e0
+    style ACL fill:#fce4ec
+</div>
+
+---
+
+## Understanding the Three Data Models
+
+### Each model has specific responsibilities and boundaries
+
+<div class="mermaid">
+graph LR
+    subgraph "External World"
+        API[API Requests]
+        DB[(Database)]
+        EXT[External Services]
+    end
+    
+    subgraph "Application Boundary"
+        DTO[DTO<br/>Data Transfer Object]
+        DOM[Domain Model<br/>Business Logic]
+        ENT[Entity<br/>Persistence Model]
+    end
+    
+    API --> DTO
+    DTO -.->|Mapper| DOM
+    DOM -.->|Mapper| ENT
+    ENT --> DB
+    EXT --> DTO
+    
+    style DTO fill:#fff3e0
+    style DOM fill:#e1f5fe
+    style ENT fill:#e8f5e8
+</div>
+
+---
+
+## DTO - Data Transfer Object
+
+**Purpose**: Safely transfer data across application boundaries
+
+```typescript
+// ✅ DTOs handle external communication
+export class CreateUserDto {
+  @IsEmail()
+  email: string;
+
+  @IsNotEmpty()
+  @Length(2, 50)
+  name: string;
+
+  @IsEnum(UserRole)
+  role: string;
+
+  @IsArray()
+  @IsString({ each: true })
+  classroomIds: string[];
+}
+```
+
+**Responsibilities:**
+- Input validation and sanitization
+- API documentation structure
+- Serialization for external systems
+- **NOT business logic**
+
+---
+
+## DTO - Response Structure
+
+```typescript
+export class UserResponseDto {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  permissions: string[];
+  classrooms: ClassroomSummaryDto[];
+}
+
+export class AccessibleFileDto {
+  id: string;
+  name: string;
+  mimeType: string;
+  availableActions: string[];
+  modifiedAt: Date;
+}
+
+export class ClassroomSummaryDto {
+  id: string;
+  name: string;
+  type: string;
+  assignedAt: Date;
+}
+```
+
+---
+
+## Domain Model - Business Logic Core
+
+**Purpose**: Represent business concepts and enforce business rules
+
+```typescript
+// ✅ Domain entities contain business logic
+export class User extends DomainEntity<UserId> {
+  constructor(
+    id: UserId,
+    private email: Email,               // Value object with validation
+    private name: string,
+    private role: UserRole,
+    private classroomAssignments: ClassroomAssignment[]
+  ) {
+    super(id);
+  }
+
+  // 🎯 Business logic lives here
+  public getFilePermissions(classroom: Classroom): FilePermissions {
+    if (!this.isAssignedToClassroom(classroom.getId())) {
+      return FilePermissions.NONE;
+    }
+
+    return this.role === UserRole.STUDENT 
+      ? FilePermissions.READ_ONLY 
+      : FilePermissions.FULL_ACCESS;
+  }
+}
+```
+
+**Responsibilities:**
+- Enforce business rules and invariants
+- Encapsulate domain behavior
+- **Pure business logic (no I/O)**
+
+---
+
+## Domain Model - Business Methods
+
+```typescript
+export class User extends DomainEntity<UserId> {
+  // ... constructor ...
+
+  public assignToClassroom(classroomId: ClassroomId): void {
+    if (this.isAssignedToClassroom(classroomId)) {
+      throw new DomainError('User already assigned to classroom');
+    }
+    
+    this.classroomAssignments.push(
+      new ClassroomAssignment(classroomId, new Date())
+    );
+  }
+
+  public removeFromClassroom(classroomId: ClassroomId): void {
+    const initialLength = this.classroomAssignments.length;
+    this.classroomAssignments = this.classroomAssignments.filter(
+      assignment => !assignment.getClassroomId().equals(classroomId)
+    );
+    
+    if (this.classroomAssignments.length === initialLength) {
+      throw new DomainError('User not assigned to this classroom');
+    }
+  }
+
+  private isAssignedToClassroom(classroomId: ClassroomId): boolean {
+    return this.classroomAssignments.some(
+      assignment => assignment.getClassroomId().equals(classroomId)
+    );
+  }
+}
+```
+
+---
+
+## Value Objects Explained
+
+**Value Objects** are immutable objects that represent concepts without identity
+
+```typescript
+// ✅ Value objects ensure data validity
+export class Email extends ValueObject {
+  constructor(private readonly value: string) {
+    super();
+    if (!this.isValid(value)) {
+      throw new DomainError('Invalid email format');
+    }
+  }
+
+  private isValid(email: string): boolean {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  }
+
+  public getValue(): string {
+    return this.value;
+  }
+
+  public equals(other: Email): boolean {
+    return this.value === other.value;
+  }
+}
+```
+
+**Why Use Value Objects?**
+- **Type Safety**: Prevent primitive obsession
+- **Validation**: Built-in business rules
+- **Immutability**: Cannot be accidentally modified
+- **Expressiveness**: `Email` vs `string` is clearer
+
+---
+
+## Value Objects - More Examples
+
+```typescript
+export class ClassroomId extends ValueObject {
+  constructor(private readonly value: string) {
+    super();
+    if (!value || value.trim().length === 0) {
+      throw new DomainError('ClassroomId cannot be empty');
+    }
+  }
+
+  public getValue(): string { return this.value; }
+  public equals(other: ClassroomId): boolean { 
+    return this.value === other.value; 
+  }
+}
+
+export class SharedDriveId extends ValueObject {
+  constructor(private readonly value: string) {
+    super();
+    if (!value || value.trim().length === 0) {
+      throw new DomainError('SharedDriveId cannot be empty');
+    }
+  }
+
+  public getValue(): string { return this.value; }
+  public equals(other: SharedDriveId): boolean { 
+    return this.value === other.value; 
+  }
+}
+
+export enum FilePermissions {
+  NONE = 'none',
+  READ_ONLY = 'read_only',
+  FULL_ACCESS = 'full_access'
+}
+```
+
+---
+
+## Mapper - Transformation Flow
+
+**Purpose**: Transform between different data representations
+
+<div class="mermaid">
+graph LR
+    DTO[UserDto] -.->|toDomain| DOM[User Domain]
+    DOM -.->|toDto| DTO
+    DOM -.->|toEntity| ENT[UserEntity]
+    ENT -.->|toDomain| DOM
+    
+    style DTO fill:#fff3e0
+    style DOM fill:#e1f5fe  
+    style ENT fill:#e8f5e8
+</div>
+
+**Mapping Responsibilities:**
+- **DTO → Domain**: Validate input, create domain objects
+- **Domain → DTO**: Extract data for API responses
+- **Entity → Domain**: Reconstruct domain objects from database
+- **Domain → Entity**: Prepare domain data for persistence
+
+---
+
+## Mapper - Domain to Entity Transformation
+
+```typescript
+@Injectable()
+export class UserMapper {
+  // Entity → Domain: When loading from database
+  entityToDomain(entity: UserEntity): User {
+    return new User(
+      new UserId(entity.id),
+      new Email(entity.email),
+      entity.name,
+      UserRole.fromString(entity.role),
+      entity.classroomAssignments?.map(assignment => 
+        new ClassroomAssignment(
+          new ClassroomId(assignment.classroomId),
+          new Date(assignment.assignedAt)
+        )
+      ) || []
+    );
+  }
+
+  // Domain → Entity: When saving to database
+  domainToEntity(domain: User): UserEntity {
+    const entity = new UserEntity();
+    entity.id = domain.getId().getValue();
+    entity.email = domain.getEmail().getValue();
+    entity.name = domain.getName();
+    entity.role = domain.getRole().toString();
+    entity.classroomAssignments = domain.getClassroomAssignments().map(assignment => ({
+      classroomId: assignment.getClassroomId().getValue(),
+      assignedAt: assignment.getAssignedAt().toISOString()
+    }));
+    return entity;
+  }
+}
+```
+
+---
+
+## ACL - Legacy Role Mapping
+
+```typescript
+// ✅ ACL translates legacy complexity to clean domain models
+@Injectable()
+export class LegacyUserACL {
+  constructor(
+    private readonly legacyUserService: LegacyUserService,
+    private readonly legacyClassroomService: LegacyClassroomService,
+    private readonly legacyPermissionService: LegacyPermissionService
+  ) {}
+
+  async getUserDomainModel(userId: string): Promise<User> {
+    // Deal with legacy complexity here, not in domain
+    const legacyUser = await this.legacyUserService.findById(userId);
+    const legacyRoles = await this.legacyPermissionService.getUserRoles(userId);
+    const legacyAssignments = await this.legacyClassroomService.getUserClassrooms(userId);
+
+    // Transform messy legacy data to clean domain model
+    const classroomAssignments = legacyAssignments
+      .filter(assignment => assignment.status === 'active')  // Legacy business logic
+      .map(assignment => new ClassroomAssignment(
+        new ClassroomId(assignment.classroom_id),  // Snake case to domain
+        new Date(assignment.created_at * 1000)     // Unix timestamp conversion
+      ));
+
+    return new User(
+      new UserId(legacyUser.user_id),                       // Legacy field mapping
+      new Email(legacyUser.email_address),                  // Different field name
+      this.mapUserRole(legacyRoles),                        // Complex role mapping
+      classroomAssignments
+    );
+  }
+}
+```
+
+---
+
+## ACL - Why It's Important
+
+**Anti-Corruption Layer** prevents legacy system complexity from polluting your clean domain model
+
+<div class="mermaid">
+graph LR
+    subgraph "New Clean Code"
+        AS[Application Service]
+        DOM[Domain Model]
+    end
+    
+    subgraph "ACL Boundary"
+        ACL[Anti-Corruption Layer]
+        MAP[Legacy Mapper]
+    end
+    
+    subgraph "Legacy System"
+        LS[Legacy Service]
+        LDB[(Legacy Database)]
+    end
+    
+    AS --> ACL
+    ACL --> MAP
+    MAP --> LS
+    LS --> LDB
+    ACL -.->|Clean Interface| DOM
+    
+    style ACL fill:#fce4ec
+    style DOM fill:#e1f5fe
+    style LS fill:#ffebee
+</div>
+
+**Why ACL is Important:**
+- **Isolation**: Legacy complexity doesn't leak into domain
+- **Clean Interface**: Domain works with clean models
+- **No Legacy Changes**: Existing code remains untouched
+- **Gradual Migration**: Add new features without breaking old ones
+
+---
+
+## Provider Pattern Explained
+
+**Provider Pattern** abstracts external service dependencies behind clean interfaces
+
+<div class="mermaid">
+graph TB
+    subgraph "Domain Layer"
+        DS[Domain Service]
+        DI[Domain Interface]
+    end
+    
+    subgraph "Infrastructure Layer"
+        PROV[Provider Implementation]
+        EXT[External API]
+    end
+    
+    DS --> DI
+    DI -.->|implements| PROV
+    PROV --> EXT
+    
+    style DI fill:#e8f5e8
+    style PROV fill:#fff3e0
+    style EXT fill:#ffebee
+</div>
+
+---
+
+## Provider Pattern Explained (Cont.)
+
+```typescript
+// ✅ Clean interface in domain layer
+export interface GoogleDriveProvider {
+  listFiles(sharedDriveId: string): Promise<DriveFile[]>;
+  downloadFile(fileId: string): Promise<Buffer>;
+  uploadFile(sharedDriveId: string, file: FileUpload): Promise<DriveFile>;
+}
+
+// ✅ Implementation in infrastructure layer
+@Injectable()
+export class GoogleDriveApiProvider implements GoogleDriveProvider {
+  constructor(private readonly googleApiClient: GoogleApiClient) {}
+
+  async listFiles(sharedDriveId: string): Promise<DriveFile[]> {
+    const response = await this.googleApiClient.files.list({
+      driveId: sharedDriveId,
+      corpora: 'drive'
+    });
+
+    // Transform external API response to domain model
+    return response.data.files?.map(file => new DriveFile(
+      new FileId(file.id!),
+      file.name!,
+      file.mimeType!,
+      new SharedDriveId(sharedDriveId)
+    )) || [];
+  }
+}
+
+// ✅ Easy to create mock for testing
+export class MockGoogleDriveProvider implements GoogleDriveProvider {
+  async listFiles(): Promise<DriveFile[]> {
+    return [
+      new DriveFile(new FileId('1'), 'test.pdf', 'application/pdf', new SharedDriveId('drive1'))
+    ];
+  }
+}
+```
+
+**Benefits:**
+- **Testability**: Easy to mock external services
+- **Flexibility**: Swap implementations (Google Drive → OneDrive)
+- **Clean Dependencies**: Domain doesn't know about external APIs
+
+---
+
+## Putting It All Together: Complete Flow
+
+<div class="mermaid">
+sequenceDiagram
+    participant C as Controller
+    participant AS as Application Service
+    participant ACL as Legacy User ACL
+    participant M as Mapper
+    participant D as Domain Service
+    participant P as Google Drive Provider
+    participant L as Legacy Service
+
+    C->>AS: getUserAccessibleFiles(userId, classroomId)
+    AS->>ACL: getUserDomainModel(userId)
+    ACL->>L: findById(userId)
+    L-->>ACL: legacy user data
+    ACL->>M: transform legacy to domain
+    M-->>AS: User domain model
+    AS->>D: canUserAccessFile(user, classroom, file)
+    D-->>AS: business rules result
+    AS->>P: listFiles(sharedDriveId)
+    P-->>AS: DriveFile[] from Google API
+    AS->>M: toDto(accessibleFiles)
+    M-->>C: UserResponseDto[]
+</div>
+
+---
+
+```typescript
+// ✅ Complete application service orchestrating everything
+@Injectable()
+export class GoogleDriveIntegrationService {
+  constructor(
+    private readonly googleDriveProvider: GoogleDriveProvider,    // External service
+    private readonly legacyUserACL: LegacyUserACL,               // Legacy integration  
+    private readonly legacyClassroomACL: LegacyClassroomACL,     // Legacy integration
+    private readonly driveAccessService: GoogleDriveAccessService, // Domain service
+    private readonly mapper: UserMapper                          // Data transformation
+  ) {}
+
+  async getUserAccessibleFiles(userId: string, classroomId: string): Promise<AccessibleFileDto[]> {
+    // 1. Get clean domain models from legacy systems (via ACL)
+    const user = await this.legacyUserACL.getUserDomainModel(userId);
+    const classroom = await this.legacyClassroomACL.getClassroomDomainModel(classroomId);
+
+    // 2. Get files from external provider
+    const sharedDriveId = classroom.getSharedDriveId().getValue();
+    const files = await this.googleDriveProvider.listFiles(sharedDriveId);
+
+    // 3. Apply domain business rules
+    const accessibleFiles = files
+      .filter(file => this.driveAccessService.canUserAccessFile(user, file.getId(), classroom, file))
+      .map(file => {
+        const availableActions = this.driveAccessService.determineUserActions(user, classroom);
+        return new AccessibleFile(file.getId(), file.getName(), availableActions);
+      });
+
+    // 4. Transform to DTOs for API response
+    return accessibleFiles.map(file => this.mapper.accessibleFileToDto(file));
+  }
+}
+```
+
+---
+
+## Clean Controller: Thin Presentation Layer
+
+```typescript
+// ✅ Thin controller, delegates to application layer
+@Controller('google-drive')
+@UseGuards(AuthGuard) // Existing auth guard - no changes needed!
+export class GoogleDriveController {
+  constructor(
+    private readonly commandBus: CommandBus,
+    private readonly queryBus: QueryBus
+  ) {}
+
+  @Get('classrooms/:classroomId/files')
+  async getAccessibleFiles(
+    @Param('classroomId') classroomId: string,
+    @Req() request: AuthenticatedRequest
+  ): Promise<AccessibleFileDto[]> {
+    const query = new GetAccessibleFilesQuery(request.user.id, classroomId);
+    return await this.queryBus.execute(query);
+  }
+
+  @Post('classrooms/:classroomId/files')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadFile(
+    @Param('classroomId') classroomId: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Req() request: AuthenticatedRequest
+  ): Promise<void> {
+    const command = new UploadFileCommand(
+      request.user.id,
+      classroomId,
+      file.originalname,
+      file.buffer
+    );
+    await this.commandBus.execute(command);
+  }
+}
+```
+
+---
+
+## Testing: Now Easy and Isolated!
+
+```typescript
+// ✅ Pure domain logic testing - no database, no external APIs
+describe('User Domain Entity', () => {
+  it('should give students read-only access', () => {
+    const user = new User(
+      new UserId('123'),
+      new Email('student@school.com'),
+      UserRole.STUDENT,
+      [new ClassroomAssignment(new ClassroomId('class-1'), new Date())]
+    );
+    
+    const classroom = new Classroom(new ClassroomId('class-1'), 'Math 101');
+    
+    const permissions = user.getFilePermissions(classroom);
+    
+    expect(permissions).toBe(FilePermissions.READ_ONLY);
+  });
+
+  it('should deny access to unassigned classrooms', () => {
+    const user = new User(/*...assigned to class-1...*/);
+    const otherClassroom = new Classroom(new ClassroomId('class-2'), 'Science');
+    
+    const permissions = user.getFilePermissions(otherClassroom);
+    
+    expect(permissions).toBe(FilePermissions.NONE);
+  });
+});
+
+```
+
+---
+
+## Key Benefits Achieved
+
+.solution-box[
+**🎯 Centralized Business Logic**
+- All domain rules in entities and domain services
+- Single source of truth for business concepts
+]
+
+.solution-box[
+**🧪 Testable Architecture**
+- Pure domain logic tested in isolation
+- Mock external dependencies easily
+]
+
+
+---
+
+## Key Benefits Achieved (Cont.)
+
+.solution-box[
+**🔗 Legacy Integration**
+- ACL pattern connects to existing services
+- No modifications to legacy code required
+]
+
+.solution-box[
+**🚀 Scalable Development**
+- Clear boundaries and responsibilities
+- Safe to add new features
+]
+
+
+---
+
+
+</textarea>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/10.6.1/mermaid.min.js"></script>
+    <script src="https://remarkjs.com/downloads/remark-latest.min.js">
+    </script>
+    <script>
+      // Initialize Mermaid
+      mermaid.initialize({
+        startOnLoad: true,
+        theme: 'default',
+        flowchart: {
+          useMaxWidth: true,
+          htmlLabels: true
+        }
+      });
+
+      var slideshow = remark.create({
+        highlightStyle: 'github',
+        highlightLines: true,
+        countIncrementalSlides: false,
+        ratio: '16:9'
+      });
+
+      // Re-render Mermaid diagrams when slides change
+      slideshow.on('afterShowSlide', function () {
+        mermaid.init(undefined, document.querySelectorAll('.mermaid'));
+      });
+
+    </script>
+</body>
+</html>
